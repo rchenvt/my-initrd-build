@@ -43,7 +43,7 @@ RUN KVER=$(ls /lib/modules | head -n 1) && \
             -n "Kernel" -d boot/vmlinuz-lts /uImage && \
     cp /build/base/boot/initramfs-lts /initramfs-lts
 # 6. Verification (Flexible grep)
-RUN dd if=/uInitrd bs=64 skip=1 | zcat | cpio -it | grep -E "rk8|rk3x" && \
+RUN zcat /initramfs-lts | cpio -it | grep -E "rk8|rk3x" && \
     echo "SUCCESS: Rockchip modules verified in uInitrd."
 
 CMD ["sh", "-c", "cp /uImage /uInitrd /initramfs-lts /out/"]
