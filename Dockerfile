@@ -8,7 +8,7 @@ WORKDIR /build
 # 2. Download and Extract (6.18.7-lts)
 ARG REL=v3.23
 ARG VER=3.23.3
-RUN wget https://dl-cdn.alpinelinux.org{REL}/releases/aarch64/alpine-uboot-${VER}-aarch64.tar.gz && \
+RUN wget https://dl-cdn.alpinelinux.org/alpine/${REL}/releases/aarch64/alpine-uboot-${VER}-aarch64.tar.gz && \
     tar -xzf alpine-uboot-${VER}-aarch64.tar.gz
 
 # 3. Setup workspace: extract original initramfs and modules
