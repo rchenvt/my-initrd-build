@@ -23,15 +23,18 @@ RUN mkdir -p /etc/mkinitfs/features.d && \
 
 # 5. Build New Initramfs & Wrap for U-Boot
 RUN KVER=$(ls /lib/modules | head -n 1) && \
-    # Build the CPIO and a standard initramfs-lts (raw)
+    echo "Detected Kernel Version: $KVER" && \
+    # 1. Create the necessary directory structure in the template
+    mkdir -p /build/base/lib/modules/$KVER && \
+    mkdir -p /build/base/boot && \
+    # 2. Build the raw initramfs (Output to a flat path /initramfs-lts)
     mkinitfs -b /build/base -F "base rk8xx" -k "$KVER" -o /initramfs-lts && \
-    # Create the U-Boot uInitrd
+    # 3. Create the U-Boot uInitrd from that raw file
     mkimage -A arm64 -O linux -T ramdisk -C gzip -n "Alpine-RK8xx-Initrd" \
             -d /initramfs-lts /uInitrd && \
-    # Create the U-Boot uImage from vmlinuz-lts
+    # 4. Create the U-Boot uImage
     mkimage -A arm64 -O linux -T kernel -C none -a 0x80080000 -e 0x80080000 \
             -n "Alpine-RK8xx-Kernel" -d boot/vmlinuz-lts /uImage
-
 # 6. Verification
 RUN dd if=/uInitrd bs=64 skip=1 | zcat | cpio -it | grep -E "rk8xx|rk808" && \
     echo "SUCCESS: Modules verified in uInitrd."
