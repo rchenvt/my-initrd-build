@@ -1,0 +1,28 @@
+name: Build Alpine ARM64 uInitrd
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build and Verify
+        run: |
+          docker build --platform linux/arm64 -t alpine-rk-builder .
+          docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/out alpine-rk-builder
+
+      - name: Upload Boot Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpine-rk8xx-boot-files
+          path: |
+            uImage
+            uInitrd
+            initramfs-lts
