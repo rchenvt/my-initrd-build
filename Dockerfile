@@ -24,17 +24,22 @@ RUN mkdir -p /etc/mkinitfs/features.d && \
 # 5. Build New Initramfs & Wrap for U-Boot
 RUN KVER=$(ls /lib/modules | head -n 1) && \
     echo "Detected Kernel Version: $KVER" && \
-    # 1. Create the necessary directory structure in the template
+    # 1. Create the template structure
     mkdir -p /build/base/lib/modules/$KVER && \
     mkdir -p /build/base/boot && \
-    # 2. Build the raw initramfs (Output to a flat path /initramfs-lts)
-    mkinitfs -b /build/base -F "base rk8xx" -k "$KVER" -o /initramfs-lts && \
-    # 3. Create the U-Boot uInitrd from that raw file
+    # 2. Build - we use the default output name 'initramfs-lts' 
+    # but we MUST know exactly where it lands. 
+    # In Alpine mkinitfs with -b, it lands in /build/base/boot/initramfs-lts
+    mkinitfs -b /build/base -F "base rk8xx" -k "$KVER" -o initramfs-lts && \
+    # 3. Create the U-Boot uInitrd using the EXACT path created by the tool
     mkimage -A arm64 -O linux -T ramdisk -C gzip -n "Alpine-RK8xx-Initrd" \
-            -d /initramfs-lts /uInitrd && \
+            -d /build/base/boot/initramfs-lts /uInitrd && \
     # 4. Create the U-Boot uImage
     mkimage -A arm64 -O linux -T kernel -C none -a 0x80080000 -e 0x80080000 \
-            -n "Alpine-RK8xx-Kernel" -d boot/vmlinuz-lts /uImage
+            -n "Alpine-RK8xx-Kernel" -d boot/vmlinuz-lts /uImage && \
+    # 5. Copy the raw initramfs to root for the CMD export step
+    cp /build/base/boot/initramfs-lts /initramfs-lts
+
 # 6. Verification
 RUN dd if=/uInitrd bs=64 skip=1 | zcat | cpio -it | grep -E "rk8xx|rk808" && \
     echo "SUCCESS: Modules verified in uInitrd."
