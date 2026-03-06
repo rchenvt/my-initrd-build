@@ -14,7 +14,7 @@ RUN wget https://dl-cdn.alpinelinux.org/alpine/${REL}/releases/aarch64/alpine-ub
 # 3. Setup workspace: extract original initramfs and modules
 RUN mkdir base && \
     zcat boot/initramfs-lts | cpio -idmv -D base && \
-    unsquashfs -d / boot/modloop-lts
+    unsquashfs -d /lib boot/modloop-lts
 
 # 4. Define Rockchip PMIC & Clock features
 RUN mkdir -p /etc/mkinitfs/features.d && \
