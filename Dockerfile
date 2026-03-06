@@ -16,21 +16,25 @@ RUN mkdir base && \
     zcat boot/initramfs-lts | cpio -idmv -D base && \
     unsquashfs -f -d /lib boot/modloop-lts
 
-# 4. Force-Inject Rockchip modules into the 'base' feature
+# 4. Manual Injection (Bypass the Feature System)
 RUN KVER=$(ls /lib/modules | head -n 1) && \
-    # Create the directory where mkinitfs looks for features
-    mkdir -p /etc/mkinitfs/features.d && \
-    # Find the actual files and put their paths into the 'base' feature file
-    # This forces mkinitfs to include them when -F base is used
-    find /lib/modules/$KVER/ -name "rk8xx*" >> /etc/mkinitfs/features.d/base.modules && \
-    find /lib/modules/$KVER/ -name "rk808*" >> /etc/mkinitfs/features.d/base.modules && \
-    find /lib/modules/$KVER/ -name "i2c-rk3x*" >> /etc/mkinitfs/features.d/base.modules
+    # Create the destination subdirectories in the base template
+    mkdir -p /build/base/lib/modules/$KVER/kernel/drivers/mfd/ \
+             /build/base/lib/modules/$KVER/kernel/drivers/clk/ \
+             /build/base/lib/modules/$KVER/kernel/drivers/rtc/ \
+             /build/base/lib/modules/$KVER/kernel/drivers/i2c/busses/ && \
+    # Manually copy the .ko.gz files from the container's /lib/modules to the template
+    find /lib/modules/$KVER/ -name "rk8xx*" -exec cp {} /build/base/lib/modules/$KVER/kernel/drivers/mfd/ \; && \
+    find /lib/modules/$KVER/ -name "clk-rk808*" -exec cp {} /build/base/lib/modules/$KVER/kernel/drivers/clk/ \; && \
+    find /lib/modules/$KVER/ -name "rtc-rk808*" -exec cp {} /build/base/lib/modules/$KVER/kernel/drivers/rtc/ \; && \
+    find /lib/modules/$KVER/ -name "i2c-rk3x*" -exec cp {} /build/base/lib/modules/$KVER/kernel/drivers/i2c/busses/ \; && \
+    # Run depmod on the base directory to register these new files
+    depmod -b /build/base $KVER
 
 # 5. Build and Wrap
 RUN KVER=$(ls /lib/modules | head -n 1) && \
-    echo "Building for $KVER" && \
-    mkdir -p /build/base/lib/modules/$KVER /build/base/boot && \
-    # We only need -F base now because we modified the base.modules file
+    mkdir -p /build/base/boot && \
+    # mkinitfs now sees the modules as "already present" in the base
     mkinitfs -b /build/base -F base -k "$KVER" -o initramfs-lts && \
     # Wrap for U-Boot
     mkimage -A arm64 -O linux -T ramdisk -C gzip -n "Alpine-RK8xx" \
