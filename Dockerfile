@@ -1,48 +1,43 @@
-FROM --platform=linux/arm64 alpine:latest  
+FROM --platform=linux/arm64 alpine:latest
 
-# 1. Install build tools
+# 1. Install tools
 RUN apk add --no-cache mkinitfs squashfs-tools cpio gzip wget u-boot-tools
 
 WORKDIR /build
 
-# 2. Download Alpine U-Boot release (6.18.7-lts)
+# 2. Download and Extract (6.18.7-lts)
 ARG REL=v3.23
 ARG VER=3.23.3
-RUN wget https://dl-cdn.alpinelinux.org/alpine/${REL}/releases/aarch64/alpine-uboot-${VER}-aarch64.tar.gz && \
+RUN wget https://dl-cdn.alpinelinux.org{REL}/releases/aarch64/alpine-uboot-${VER}-aarch64.tar.gz && \
     tar -xzf alpine-uboot-${VER}-aarch64.tar.gz
 
 # 3. Setup workspace: extract original initramfs and modules
 RUN mkdir base && \
     zcat boot/initramfs-lts | cpio -idmv -D base && \
-    unsquashfs -d /lib boot/modloop-lts
+    unsquashfs -f -d /lib boot/modloop-lts
 
-# 4. Define Rockchip PMIC & Clock features
-RUN mkdir -p /etc/mkinitfs/features.d && \
-    printf "kernel/drivers/mfd/rk8xx*\nkernel/drivers/clk/clk-rk808*\nkernel/drivers/rtc/rtc-rk808*\nkernel/drivers/i2c/busses/i2c-rk3x*\n" \
-    > /etc/mkinitfs/features.d/rk8xx.modules
-
-# 5. Build New Initramfs & Wrap for U-Boot
+# 4. Force-Inject Rockchip modules
+# We list the exact .ko.gz paths to ensure mkinitfs cannot miss them
 RUN KVER=$(ls /lib/modules | head -n 1) && \
-    echo "Detected Kernel Version: $KVER" && \
-    # 1. Create the template structure
-    mkdir -p /build/base/lib/modules/$KVER && \
-    mkdir -p /build/base/boot && \
-    # 2. Build - we use the default output name 'initramfs-lts' 
-    # but we MUST know exactly where it lands. 
-    # In Alpine mkinitfs with -b, it lands in /build/base/boot/initramfs-lts
+    mkdir -p /etc/mkinitfs/features.d && \
+    find /lib/modules/$KVER/kernel/drivers/mfd/ -name "rk8xx*" > /etc/mkinitfs/features.d/rk8xx.modules && \
+    find /lib/modules/$KVER/kernel/drivers/clk/ -name "clk-rk808*" >> /etc/mkinitfs/features.d/rk8xx.modules && \
+    find /lib/modules/$KVER/kernel/drivers/rtc/ -name "rtc-rk808*" >> /etc/mkinitfs/features.d/rk8xx.modules && \
+    find /lib/modules/$KVER/kernel/drivers/i2c/busses/ -name "i2c-rk3x*" >> /etc/mkinitfs/features.d/rk8xx.modules
+
+# 5. Build and Wrap
+RUN KVER=$(ls /lib/modules | head -n 1) && \
+    mkdir -p /build/base/lib/modules/$KVER /build/base/boot && \
+    # We pass "rk8xx" to -F so it loads our custom feature file
     mkinitfs -b /build/base -F "base rk8xx" -k "$KVER" -o initramfs-lts && \
-    # 3. Create the U-Boot uInitrd using the EXACT path created by the tool
-    mkimage -A arm64 -O linux -T ramdisk -C gzip -n "Alpine-RK8xx-Initrd" \
+    mkimage -A arm64 -O linux -T ramdisk -C gzip -n "Alpine-RK8xx" \
             -d /build/base/boot/initramfs-lts /uInitrd && \
-    # 4. Create the U-Boot uImage
     mkimage -A arm64 -O linux -T kernel -C none -a 0x80080000 -e 0x80080000 \
-            -n "Alpine-RK8xx-Kernel" -d boot/vmlinuz-lts /uImage && \
-    # 5. Copy the raw initramfs to root for the CMD export step
+            -n "Kernel" -d boot/vmlinuz-lts /uImage && \
     cp /build/base/boot/initramfs-lts /initramfs-lts
 
-# 6. Verification
-RUN dd if=/uInitrd bs=64 skip=1 | zcat | cpio -it | grep -E "rk8xx|rk808" && \
-    echo "SUCCESS: Modules verified in uInitrd."
+# 6. Verification (Flexible grep)
+RUN dd if=/uInitrd bs=64 skip=1 | zcat | cpio -it | grep -E "rk8|rk3x" && \
+    echo "SUCCESS: Rockchip modules verified in uInitrd."
 
-# 7. Output all files
-CMD cp /uImage /uInitrd /initramfs-lts /out/
+CMD ["sh", "-c", "cp /uImage /uInitrd /initramfs-lts /out/"]
